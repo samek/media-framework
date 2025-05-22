@@ -361,7 +361,22 @@ ngx_http_pckg_enc_create(ngx_http_request_t *r, media_enc_t **result)
     }
 
     elcf = ngx_http_get_module_loc_conf(r, ngx_http_pckg_enc_module);
+    ctx = ngx_http_get_module_ctx(r, ngx_http_pckg_core_module);
 
+    if (ngx_http_pckg_enc_get_key(r, enc->key) != NGX_OK) {
+        return NGX_ERROR;
+    }
+
+    if (ngx_http_pckg_enc_get_iv(r, enc->iv) != NGX_OK) {
+        return NGX_ERROR;
+    }
+
+   
+    if (ctx->handler->init_enc != NULL) {
+        if (ctx->handler->init_enc(r, enc) != NGX_OK) {
+            return NGX_ERROR;
+        }
+    }
     if (elcf->json) {
         if (ngx_http_pckg_complex_value_json(r, elcf->json, &value)
             != NGX_OK)
@@ -376,22 +391,6 @@ ngx_http_pckg_enc_create(ngx_http_request_t *r, media_enc_t **result)
 
         *result = enc;
         return NGX_OK;
-    }
-
-    if (ngx_http_pckg_enc_get_key(r, enc->key) != NGX_OK) {
-        return NGX_ERROR;
-    }
-
-    if (ngx_http_pckg_enc_get_iv(r, enc->iv) != NGX_OK) {
-        return NGX_ERROR;
-    }
-
-    ctx = ngx_http_get_module_ctx(r, ngx_http_pckg_core_module);
-
-    if (ctx->handler->init_enc != NULL) {
-        if (ctx->handler->init_enc(r, enc) != NGX_OK) {
-            return NGX_ERROR;
-        }
     }
 
     *result = enc;
