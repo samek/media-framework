@@ -16,6 +16,7 @@ auto/configure                                            \
     --with-stream                                         \
     --with-threads                                        \
     --with-http_dav_module                                \
+    --with-http_auth_request_module                       \
     --add-module=$MEDIA_FRAMEWORK/nginx-common            \
     --add-module=$MEDIA_FRAMEWORK/nginx-kmp-in-module     \
     --add-module=$MEDIA_FRAMEWORK/nginx-kmp-out-module    \
