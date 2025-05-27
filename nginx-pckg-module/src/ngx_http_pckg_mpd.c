@@ -44,13 +44,20 @@ static char *ngx_http_pckg_mpd_merge_loc_conf(ngx_conf_t *cf, void *parent,
     "    availabilityStartTime=\"" MPD_DATE_TIME_FORMAT "\"\n"               \
     "    publishTime=\"" MPD_DATE_TIME_FORMAT "\"\n"
 
+#define MPD_HEADER2_ENDLIST  "\"\n"                                          \
+    "    type=\"static\"\n"                                                 
+
+
 #define MPD_MIN_UPDATE_PERIOD                                                \
     "    minimumUpdatePeriod=\"PT%uD.%03uDS\"\n"
 
 #define MPD_MEDIA_PRES_DURATION                                              \
     "    mediaPresentationDuration=\"PT%uD.%03uDS\"\n"
 
-#define MPD_HEADER3                                                          \
+#define MPD_HEADER3_ENDLIST                                                  \
+    "    minBufferTime=\"PT%uD.%03uDS\">\n"                                   
+
+#define MPD_HEADER3                                                         \
     "    minBufferTime=\"PT%uD.%03uDS\"\n"                                   \
     "    timeShiftBufferDepth=\"PT%uD.%03uDS\"\n"                            \
     "    suggestedPresentationDelay=\"PT%uD.%03uDS\">\n"
@@ -1310,6 +1317,16 @@ ngx_http_pckg_mpd_header_get_size(ngx_str_t *profiles)
         + sizeof(MPD_HEADER3) - 1 + NGX_INT32_LEN * 6;
 }
 
+static size_t
+ngx_http_pckg_mpd_header_end_list_get_size(ngx_str_t *profiles)
+{
+    return sizeof(MPD_HEADER1) - 1
+        + mpd_escape_html_len(profiles)
+        + sizeof(MPD_HEADER2_ENDLIST) - 1
+        + sizeof(MPD_MEDIA_PRES_DURATION) - 1 + NGX_INT32_LEN * 2
+        + sizeof(MPD_HEADER3_ENDLIST) - 1 + NGX_INT32_LEN * 1;
+}
+
 
 static u_char *
 ngx_http_pckg_mpd_header_write(u_char *p, ngx_http_request_t *r,
@@ -1340,13 +1357,13 @@ ngx_http_pckg_mpd_header_write(u_char *p, ngx_http_request_t *r,
     p = ngx_copy_fix(p, MPD_HEADER1);
 
     p = (u_char *) ngx_escape_html(p, profiles->data, profiles->len);
-
-    p = ngx_sprintf(p, MPD_HEADER2,
-        mpd_date_time_params(avail_time_gmt),
-        mpd_date_time_params(publish_time_gmt));
-
+   
 
     if (!timeline->header.end_list) {
+        p = ngx_sprintf(p, MPD_HEADER2,
+            mpd_date_time_params(avail_time_gmt),
+            mpd_date_time_params(publish_time_gmt));
+
         min_update_period = rescale_time(
             timeline->duration / timeline->segment_count, timescale, 1000);
 
@@ -1355,6 +1372,7 @@ ngx_http_pckg_mpd_header_write(u_char *p, ngx_http_request_t *r,
             (uint32_t) (min_update_period % 1000));
 
     } else {
+        p = ngx_copy_fix(p, MPD_HEADER2_ENDLIST);
         duration = rescale_time(timeline->duration, timescale, 1000);
 
         p = ngx_sprintf(p, MPD_MEDIA_PRES_DURATION,
@@ -1374,14 +1392,18 @@ ngx_http_pckg_mpd_header_write(u_char *p, ngx_http_request_t *r,
     presentation_delay =
         channel->header.now * 1000 -
         rescale_time(segment_time, timescale, 1000);
-
-    p = ngx_sprintf(p, MPD_HEADER3,
-        (uint32_t) (buffer_time / 1000),
-        (uint32_t) (buffer_time % 1000),
-        (uint32_t) (buffer_depth / 1000),
-        (uint32_t) (buffer_depth % 1000),
-        (uint32_t) (presentation_delay / 1000),
-        (uint32_t) (presentation_delay % 1000));
+    if (timeline->header.end_list) {
+        p = ngx_sprintf(p, MPD_HEADER3_ENDLIST,
+            (uint32_t) (buffer_time / 1000));
+    } else {
+        p = ngx_sprintf(p, MPD_HEADER3,
+            (uint32_t) (buffer_time / 1000),
+            (uint32_t) (buffer_time % 1000),
+            (uint32_t) (buffer_depth / 1000),
+            (uint32_t) (buffer_depth % 1000),
+            (uint32_t) (presentation_delay / 1000),
+            (uint32_t) (presentation_delay % 1000));
+    }
 
     return p;
 }
@@ -1423,10 +1445,7 @@ ngx_http_pckg_mpd_build(ngx_http_request_t *r, ngx_pckg_channel_t *channel,
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
         }
 
-    } else {
-        ngx_str_set(&profiles, "urn:mpeg:dash:profile:isoff-live:2011");
-    }
-
+    } 
     sets.channel = channel;
 
     if (ngx_pckg_adapt_sets_init(&sets) != NGX_OK) {
@@ -1444,13 +1463,27 @@ ngx_http_pckg_mpd_build(ngx_http_request_t *r, ngx_pckg_channel_t *channel,
 
     /* get size */
     selectors_size = ngx_pckg_adapt_sets_get_selectors_size(&sets);
+    // in case the end_list is on we need different headers. 
+    if (timeline->header.end_list) {
+        ngx_str_set(&profiles, "urn:mpeg:dash:profile:isoff-on-demand:2011");
+        size = ngx_http_pckg_mpd_header_end_list_get_size(&profiles)
+            + n * (sizeof(MPD_PERIOD_HEADER_START_DURATION) - 1
+                + NGX_INT32_LEN * 5
+                + selectors_size
+                + sizeof(MPD_PERIOD_FOOTER) - 1)
+            + sizeof(MPD_UTC_TIMING) - 1 + MPD_DATE_TIME_LEN
+            + sizeof(MPD_FOOTER) - 1;
 
-    size = ngx_http_pckg_mpd_header_get_size(&profiles)
-        + n * (sizeof(MPD_PERIOD_HEADER_START_DURATION) - 1 + NGX_INT32_LEN * 5
-            + selectors_size
-            + sizeof(MPD_PERIOD_FOOTER) - 1)
-        + sizeof(MPD_UTC_TIMING) - 1 + MPD_DATE_TIME_LEN
-        + sizeof(MPD_FOOTER) - 1;
+    } else {
+        ngx_str_set(&profiles, "urn:mpeg:dash:profile:isoff-live:2011");
+        size = ngx_http_pckg_mpd_header_get_size(&profiles)
+            + n * (sizeof(MPD_PERIOD_HEADER_START) - 1
+                + NGX_INT32_LEN * 3
+                + selectors_size
+                + sizeof(MPD_PERIOD_FOOTER) - 1)
+            + sizeof(MPD_UTC_TIMING) - 1 + MPD_DATE_TIME_LEN
+            + sizeof(MPD_FOOTER) - 1;
+    }
 
     for (i = 0; i < n; i++) {
         period = &periods[i];
