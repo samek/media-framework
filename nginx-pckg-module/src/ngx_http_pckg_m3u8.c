@@ -915,7 +915,7 @@ ngx_http_pckg_m3u8_media_group_write(u_char *p, ngx_pckg_media_group_t *group,
             *p++ = '"';
         }
 
-        if (variant->header.is_default) {
+        if (variant->header.is_default || media_type == KMP_MEDIA_AUDIO ) {
             p = ngx_copy_fix(p, M3U8_MEDIA_DEFAULT);
 
         } else {
