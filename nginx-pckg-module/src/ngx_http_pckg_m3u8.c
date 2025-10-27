@@ -69,8 +69,7 @@ static char *ngx_http_pckg_m3u8_merge_loc_conf(ngx_conf_t *cf, void *parent,
 /* index playlist */
 #define M3U8_INDEX_HEADER            "#EXTM3U\n#EXT-X-TARGETDURATION:%uD\n"  \
     "#EXT-X-VERSION:%uD\n#EXT-X-MEDIA-SEQUENCE:%uD\n"                        \
-    "#EXT-X-DISCONTINUITY-SEQUENCE:%uD\n#EXT-X-INDEPENDENT-SEGMENTS\n"       \
-    "#EXT-X-ALLOW-CACHE:YES\n"
+    "#EXT-X-DISCONTINUITY-SEQUENCE:%uD\n#EXT-X-INDEPENDENT-SEGMENTS\n"
 
 #define M3U8_EXTINF                  "#EXTINF:"
 #define M3U8_GAP                     "#EXT-X-GAP\n"
@@ -654,8 +653,8 @@ ngx_http_pckg_m3u8_session_key_get_size(ngx_http_request_t *r)
     ctx = ngx_http_get_module_ctx(r, ngx_http_pckg_core_module);
     channel = ctx->channel;
 
-    size = sizeof("\n") - 1;
-
+    //size = sizeof("\n") - 1; // don't add new line here
+    size = 0;
     switch (elcf->scope) {
 
     case NGX_HTTP_PCKG_ENC_SCOPE_CHANNEL:
@@ -753,7 +752,8 @@ ngx_http_pckg_m3u8_session_key_write(u_char *p, ngx_http_request_t *r)
     ctx = ngx_http_get_module_ctx(r, ngx_http_pckg_core_module);
     channel = ctx->channel;
 
-    *p++ = '\n';
+    //Don't add new line here
+    //*p++ = '\n';
 
     switch (elcf->scope) {
 
@@ -858,7 +858,8 @@ ngx_http_pckg_m3u8_media_group_get_size(ngx_pckg_media_group_t *group,
         base_size += sizeof(M3U8_MEDIA_CHANNELS) + NGX_INT32_LEN;
     }
 
-    result = sizeof("\n") - 1 + base_size * group->variants.nelts;
+    //result = sizeof("\n") - 1 + base_size * group->variants.nelts; // don't add new line here
+    result = base_size * group->variants.nelts;
 
     variants = group->variants.elts;
     n = group->variants.nelts;
@@ -887,7 +888,7 @@ ngx_http_pckg_m3u8_media_group_write(u_char *p, ngx_pckg_media_group_t *group,
     ngx_pckg_track_t    *track;
     ngx_pckg_variant_t  *variant, **variants;
 
-    *p++ = '\n';
+    //*p++ = '\n'; //Don't add new line here'
 
     variants = group->variants.elts;
     n = group->variants.nelts;
@@ -968,7 +969,7 @@ ngx_http_pckg_m3u8_closed_captions_get_size(ngx_pckg_channel_t *channel)
     css = channel->css.elts;
     n = channel->css.nelts;
 
-    size = sizeof("\n") - 1 + (sizeof(M3U8_MEDIA_CC1) - 1
+    size =  (sizeof(M3U8_MEDIA_CC1) - 1
         + sizeof(M3U8_MEDIA_CC2) - 1 + sizeof(M3U8_MEDIA_LANG) - 1
         + sizeof("\"\n") - 1) * n;
 
@@ -999,7 +1000,7 @@ ngx_http_pckg_m3u8_closed_captions_write(u_char *p,
 
     css = channel->css.elts;
 
-    *p++ = '\n';
+    //*p++ = '\n';
 
     for (i = 0; i < n; i++) {
         cs = &css[i];
@@ -1037,7 +1038,7 @@ ngx_http_pckg_m3u8_session_data_get_size(ngx_array_t *arr)
     dvs = arr->elts;
     n = arr->nelts;
 
-    size = sizeof("\n") - 1 + (sizeof(M3U8_SESSION_DATA_ID) - 1
+    size = (sizeof(M3U8_SESSION_DATA_ID) - 1
         + sizeof(M3U8_SESSION_DATA_VALUE) - 1
         + sizeof(M3U8_SESSION_DATA_URI) - 1
         + sizeof(M3U8_SESSION_DATA_LANG) - 1
@@ -1065,7 +1066,7 @@ ngx_http_pckg_m3u8_session_data_write(u_char *p, ngx_array_t *arr)
 
     dvs = arr->elts;
 
-    *p++ = '\n';
+    //*p++ = '\n';
 
     for (i = 0; i < n; i++) {
         dv = &dvs[i];
@@ -1134,8 +1135,8 @@ ngx_http_pckg_m3u8_streams_get_size(ngx_array_t *streams)
         ngx_http_pckg_prefix_index.len +
         ngx_http_pckg_m3u8_ext.len + sizeof("\n") - 1;
 
-    result = sizeof("\n") - 1 + base_size * streams->nelts;
-
+    //result = sizeof("\n") - 1 + base_size * streams->nelts;
+    result =  base_size * streams->nelts;
     cur = streams->elts;
     for (last = cur + streams->nelts; cur < last; cur++) {
         result += ngx_pckg_sep_selector_get_size(&cur->variant->id);
@@ -1191,7 +1192,7 @@ ngx_http_pckg_m3u8_streams_write(u_char *p, ngx_http_request_t *r,
         ngx_str_null(&cc_group);
     }
 
-    *p++ = '\n';
+    //*p++ = '\n';
 
     cur = streams->elts;
     for (last = cur + streams->nelts; cur < last; cur++) {
@@ -1395,7 +1396,10 @@ ngx_http_pckg_m3u8_master_build(ngx_http_request_t *r,
     size += ngx_http_pckg_m3u8_session_data_get_size(&dvs);
 
 #if (NGX_HAVE_OPENSSL_EVP)
-    size += ngx_http_pckg_m3u8_session_key_get_size(r);
+    //size += ngx_http_pckg_m3u8_session_key_get_size(r);
+    if (size==0) { // no session key
+      size +=  ngx_http_pckg_m3u8_session_key_get_size(r);
+    }
 #endif
 
     for (media_type = 0; media_type < KMP_MEDIA_COUNT; media_type++) {
@@ -1429,7 +1433,10 @@ ngx_http_pckg_m3u8_master_build(ngx_http_request_t *r,
     p = ngx_http_pckg_m3u8_session_data_write(p, &dvs);
 
 #if (NGX_HAVE_OPENSSL_EVP)
-    p = ngx_http_pckg_m3u8_session_key_write(p, r);
+    //p = ngx_http_pckg_m3u8_session_key_write(p, r);
+    if (size==0) { // no session key
+        p =  ngx_http_pckg_m3u8_session_key_write(p, r);
+    }
 #endif
 
     /* write media groups */
