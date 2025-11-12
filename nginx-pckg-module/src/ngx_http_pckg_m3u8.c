@@ -76,7 +76,7 @@ static char *ngx_http_pckg_m3u8_merge_loc_conf(ngx_conf_t *cf, void *parent,
 #define M3U8_BITRATE                 "#EXT-X-BITRATE:"
 #define M3U8_DISCONTINUITY           "#EXT-X-DISCONTINUITY\n"
 #define M3U8_PROGRAM_DATE_TIME                                               \
-    "#EXT-X-PROGRAM-DATE-TIME:%4d-%02d-%02dT%02d:%02d:%02d\n"
+    "#EXT-X-PROGRAM-DATE-TIME:%4d-%02d-%02dT%02d:%02d:%02dZ\n"
 #define M3U8_PROGRAM_DATE_TIME_LEN                                           \
     (sizeof("#EXT-X-PROGRAM-DATE-TIME:2000-01-01T00:00:00Z\n") - 1)
 #define M3U8_MAP_BASE                "#EXT-X-MAP:URI=\""
