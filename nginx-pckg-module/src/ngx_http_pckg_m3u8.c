@@ -2156,7 +2156,7 @@ ngx_http_pckg_m3u8_index_build(ngx_http_request_t *r, ngx_str_t *result)
 {
     u_char                         *p;
     size_t                          size, period_size, segment_size;
-    ngx_tm_t                        gmt;
+   //ngx_tm_t                        gmt;
     uint32_t                        version;
     uint32_t                        part_target;
     uint32_t                        target_duration;
