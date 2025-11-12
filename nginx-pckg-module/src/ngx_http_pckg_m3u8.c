@@ -76,9 +76,9 @@ static char *ngx_http_pckg_m3u8_merge_loc_conf(ngx_conf_t *cf, void *parent,
 #define M3U8_BITRATE                 "#EXT-X-BITRATE:"
 #define M3U8_DISCONTINUITY           "#EXT-X-DISCONTINUITY\n"
 #define M3U8_PROGRAM_DATE_TIME                                               \
-    "#EXT-X-PROGRAM-DATE-TIME:%4d-%02d-%02dT%02d:%02d:%02d.%03d+00:00\n"
+    "#EXT-X-PROGRAM-DATE-TIME:%4d-%02d-%02dT%02d:%02d:%02d\n"
 #define M3U8_PROGRAM_DATE_TIME_LEN                                           \
-    (sizeof("#EXT-X-PROGRAM-DATE-TIME:2000-01-01T00:00:00.000+00:00\n") - 1)
+    (sizeof("#EXT-X-PROGRAM-DATE-TIME:2000-01-01T00:00:00Z\n") - 1)
 #define M3U8_MAP_BASE                "#EXT-X-MAP:URI=\""
 #define M3U8_END_LIST                "#EXT-X-ENDLIST\n"
 
@@ -2374,8 +2374,7 @@ ngx_http_pckg_m3u8_index_build(ngx_http_request_t *r, ngx_str_t *result)
 
             p = ngx_sprintf(p, M3U8_PROGRAM_DATE_TIME,
                 gmt.ngx_tm_year, gmt.ngx_tm_mon, gmt.ngx_tm_mday,
-                gmt.ngx_tm_hour, gmt.ngx_tm_min, gmt.ngx_tm_sec,
-                (int) ((ph->time / milliscale) % 1000));
+                gmt.ngx_tm_hour, gmt.ngx_tm_min, gmt.ngx_tm_sec);
         }
 
         p = ngx_http_pckg_m3u8_write_period_segments(p, period,
