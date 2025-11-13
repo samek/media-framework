@@ -1781,51 +1781,58 @@ ngx_http_pckg_m3u8_track_parts_get_size(ngx_pckg_channel_t *channel,
     return size;
 }
 
-
 static u_char *
 ngx_http_pckg_m3u8_write_period_segments(u_char *p, ngx_pckg_period_t *period,
-    ngx_str_t *seg_suffix, uint32_t milliscale,
-    ngx_pckg_segment_info_ctx_t *bi)
+                                         ngx_str_t *seg_suffix, uint32_t milliscale,
+                                         ngx_pckg_segment_info_ctx_t *bi, ngx_flag_t program_date_time,
+                                         uint32_t timescale, ngx_http_request_t *r, ngx_pckg_variant_t *variant,
+                                         ngx_pckg_track_t *track)
 {
-    int64_t                     time;
-    int64_t                     start, end;
-    uint32_t                    bitrate;
-    uint32_t                    duration;
-    uint32_t                    last_bitrate;
-    uint32_t                    last_segment;
-    uint32_t                    segment_index;
-    uint32_t                    part_segment_index;
-    ngx_uint_t                  i, n;
-    ngx_flag_t                  pending_segment;
-    ngx_pckg_track_t           *track;
-    ngx_pckg_channel_t         *channel;
-    ngx_ksmp_segment_repeat_t  *elt;
+    int64_t time;
+    int64_t start, end;
+    uint32_t bitrate;
+    uint32_t duration;
+    uint32_t last_bitrate;
+    uint32_t last_segment;
+    uint32_t segment_index;
+    uint32_t part_segment_index;
+    ngx_uint_t i, n;
+    ngx_flag_t pending_segment;
+    ngx_pckg_track_t *track_ptr;
+    ngx_pckg_channel_t *channel;
+    ngx_ksmp_segment_repeat_t *elt;
+    ngx_tm_t gmt;
 
     segment_index = period->header.segment_index;
 
     /* get the segment index of the first part */
 
     channel = period->timeline->channel;
-    if (channel->tracks.nelts == 1) {
-        track = channel->tracks.elts;
+    if (channel->tracks.nelts == 1)
+    {
+        track_ptr = channel->tracks.elts;
 
-        for ( ;; ) {
+        for (;;)
+        {
 
-            if (track->parts_cur >= track->parts_end) {
+            if (track_ptr->parts_cur >= track_ptr->parts_end)
+            {
                 part_segment_index = NGX_KSMP_INVALID_SEGMENT_INDEX;
                 break;
             }
 
-            part_segment_index = track->parts_cur->segment_index;
-            if (part_segment_index >= segment_index) {
+            part_segment_index = track_ptr->parts_cur->segment_index;
+            if (part_segment_index >= segment_index)
+            {
                 break;
             }
 
-            track->parts_cur++;
+            track_ptr->parts_cur++;
         }
-
-    } else {
-        track = NULL;
+    }
+    else
+    {
+        track_ptr = NULL;
         part_segment_index = NGX_KSMP_INVALID_SEGMENT_INDEX;
     }
 
@@ -1835,31 +1842,51 @@ ngx_http_pckg_m3u8_write_period_segments(u_char *p, ngx_pckg_period_t *period,
     last_bitrate = 0;
 
     n = period->nelts;
-    if (period->elts[n - 1].duration == NGX_KSMP_PENDING_SEGMENT_DURATION) {
+    if (period->elts[n - 1].duration == NGX_KSMP_PENDING_SEGMENT_DURATION)
+    {
         n--;
         pending_segment = 1;
-
-    } else {
+    }
+    else
+    {
         pending_segment = 0;
     }
 
-    for (i = 0; i < n; i++) {
+    for (i = 0; i < n; i++)
+    {
         elt = &period->elts[i];
 
         last_segment = segment_index + elt->count;
 
-        while (segment_index < last_segment) {
+        while (segment_index < last_segment)
+        {
+
+            /* write encryption key before each segment */
+#if (NGX_HAVE_OPENSSL_EVP)
+            p = ngx_http_pckg_m3u8_enc_key_write(p, r, &ngx_http_pckg_m3u8_key,
+                                                 variant, track);
+#endif
+
+            /* write program date time before each segment */
+            if (program_date_time)
+            {
+                ngx_gmtime(time / timescale, &gmt);
+                p = ngx_sprintf(p, M3U8_PROGRAM_DATE_TIME,
+                                gmt.ngx_tm_year, gmt.ngx_tm_mon, gmt.ngx_tm_mday,
+                                gmt.ngx_tm_hour, gmt.ngx_tm_min, gmt.ngx_tm_sec);
+            }
 
             /* write parts */
 
-            if (segment_index == part_segment_index) {
-                p = ngx_http_pckg_m3u8_parts_write(p, track->parts_cur,
-                    seg_suffix, time, milliscale);
+            if (segment_index == part_segment_index)
+            {
+                p = ngx_http_pckg_m3u8_parts_write(p, track_ptr->parts_cur,
+                                                   seg_suffix, time, milliscale);
 
-                track->parts_cur++;
-                part_segment_index = track->parts_cur < track->parts_end
-                    ? track->parts_cur->segment_index
-                    : NGX_KSMP_INVALID_SEGMENT_INDEX;
+                track_ptr->parts_cur++;
+                part_segment_index = track_ptr->parts_cur < track_ptr->parts_end
+                                         ? track_ptr->parts_cur->segment_index
+                                         : NGX_KSMP_INVALID_SEGMENT_INDEX;
             }
 
             /* write extinf */
@@ -1875,10 +1902,12 @@ ngx_http_pckg_m3u8_write_period_segments(u_char *p, ngx_pckg_period_t *period,
 
             bitrate = ngx_pckg_segment_info_get(bi, segment_index, duration);
 
-            if (bitrate == 0) {
+            if (bitrate == 0)
+            {
                 p = ngx_copy_fix(p, M3U8_GAP);
-
-            } else {
+            }
+            else
+            {
                 /* bps -> kbps */
                 bitrate = bitrate > 1000 ? bitrate / 1000 : 1;
 
@@ -1904,16 +1933,16 @@ ngx_http_pckg_m3u8_write_period_segments(u_char *p, ngx_pckg_period_t *period,
 
     /* write pending segment parts */
 
-    if (pending_segment && segment_index == part_segment_index) {
-        p = ngx_http_pckg_m3u8_parts_write(p, track->parts_cur,
-            seg_suffix, time, milliscale);
+    if (pending_segment && segment_index == part_segment_index)
+    {
+        p = ngx_http_pckg_m3u8_parts_write(p, track_ptr->parts_cur,
+                                           seg_suffix, time, milliscale);
 
-        track->parts_cur++;
+        track_ptr->parts_cur++;
     }
 
     return p;
 }
-
 
 static ngx_int_t
 ngx_http_pckg_m3u8_get_selector(ngx_http_request_t *r,
@@ -2127,7 +2156,7 @@ ngx_http_pckg_m3u8_index_build(ngx_http_request_t *r, ngx_str_t *result)
 {
     u_char                         *p;
     size_t                          size, period_size, segment_size;
-    ngx_tm_t                        gmt;
+   //ngx_tm_t                        gmt;
     uint32_t                        version;
     uint32_t                        part_target;
     uint32_t                        target_duration;
@@ -2227,8 +2256,15 @@ ngx_http_pckg_m3u8_index_build(ngx_http_request_t *r, ngx_str_t *result)
         mlcf->program_date_time, 1);
 
     if (program_date_time) {
-        period_size += M3U8_PROGRAM_DATE_TIME_LEN;
+        segment_size += M3U8_PROGRAM_DATE_TIME_LEN;
     }
+
+#if (NGX_HAVE_OPENSSL_EVP)
+    track = channel->tracks.elts;
+
+    segment_size += ngx_http_pckg_m3u8_enc_key_get_size(r, &ngx_http_pckg_m3u8_key,
+                                                       variant, track);
+#endif
 
     if (container->init_file_ext) {
         period_size +=
@@ -2247,12 +2283,12 @@ ngx_http_pckg_m3u8_index_build(ngx_http_request_t *r, ngx_str_t *result)
         ngx_http_pckg_m3u8_redition_reports_get_size(channel) +
         sizeof(M3U8_END_LIST) - 1;
 
-#if (NGX_HAVE_OPENSSL_EVP)
+/*#if (NGX_HAVE_OPENSSL_EVP)
     track = channel->tracks.elts;
 
     size += ngx_http_pckg_m3u8_enc_key_get_size(r, &ngx_http_pckg_m3u8_key,
         variant, track);
-#endif
+#endif*/
 
     if (ngx_pckg_segment_info_has_bitrate(bi)) {
         size += ngx_http_pckg_m3u8_get_bitrate_size(r, channel,
@@ -2327,10 +2363,10 @@ ngx_http_pckg_m3u8_index_build(ngx_http_request_t *r, ngx_str_t *result)
         last_map_index = NGX_KSMP_INVALID_SEGMENT_INDEX;
     }
 
-#if (NGX_HAVE_OPENSSL_EVP)
+/*#if (NGX_HAVE_OPENSSL_EVP)
     p = ngx_http_pckg_m3u8_enc_key_write(p, r, &ngx_http_pckg_m3u8_key,
         variant, track);
-#endif
+#endif*/
 
     /* write the periods */
 
@@ -2369,16 +2405,17 @@ ngx_http_pckg_m3u8_index_build(ngx_http_request_t *r, ngx_str_t *result)
             last_map_index = map_index;
         }
 
-        if (program_date_time) {
+        /*if (program_date_time) {
             ngx_gmtime(ph->time / timescale, &gmt);
 
             p = ngx_sprintf(p, M3U8_PROGRAM_DATE_TIME,
                 gmt.ngx_tm_year, gmt.ngx_tm_mon, gmt.ngx_tm_mday,
                 gmt.ngx_tm_hour, gmt.ngx_tm_min, gmt.ngx_tm_sec);
-        }
+        }*/
 
         p = ngx_http_pckg_m3u8_write_period_segments(p, period,
-            &seg_suffix, milliscale, bi);
+                                                     &seg_suffix, milliscale, bi, program_date_time, timescale, r,
+                                                     variant, track);
     }
 
     /* write the footer */
