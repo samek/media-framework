@@ -1,11 +1,11 @@
-ARG ALPINE_VER=3.16
+ARG ALPINE_VER=3.22
 FROM alpine:$ALPINE_VER as builder
 
 RUN apk --update add wget git procps   openssl-dev pcre-dev zlib-dev build-base libaio-dev linux-headers
 
 WORKDIR /tmp/build
 
-ARG NGINX_VERSION=1.21.0
+ARG NGINX_VERSION=1.27.3
 ARG NGX_DEVEL_KIT_VERSION=v0.3.1
 ARG SET_MISC_NGINX_MODULE_VERSION=v0.32
 ARG SET_AWS_AUTH_MODULE_VERSION=1.1
@@ -58,7 +58,7 @@ RUN apk add --update \
 COPY --from=builder /usr/local/nginx /usr/local/nginx
 
 RUN apk add cmd:pip3
-RUN pip3 install redis==5.2.1 boto3
+RUN apk add --no-cache py3-redis py3-boto3
 
 EXPOSE 6543
 EXPOSE 8003
