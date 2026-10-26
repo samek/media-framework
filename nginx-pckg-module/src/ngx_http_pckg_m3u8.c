@@ -76,9 +76,9 @@ static char *ngx_http_pckg_m3u8_merge_loc_conf(ngx_conf_t *cf, void *parent,
 #define M3U8_BITRATE                 "#EXT-X-BITRATE:"
 #define M3U8_DISCONTINUITY           "#EXT-X-DISCONTINUITY\n"
 #define M3U8_PROGRAM_DATE_TIME                                               \
-    "#EXT-X-PROGRAM-DATE-TIME:%4d-%02d-%02dT%02d:%02d:%02dZ\n"
+    "#EXT-X-PROGRAM-DATE-TIME:%4d-%02d-%02dT%02d:%02d:%02d.%03uDZ\n"
 #define M3U8_PROGRAM_DATE_TIME_LEN                                           \
-    (sizeof("#EXT-X-PROGRAM-DATE-TIME:2000-01-01T00:00:00Z\n") - 1)
+    (sizeof("#EXT-X-PROGRAM-DATE-TIME:2000-01-01T00:00:00.000Z\n") - 1)
 #define M3U8_MAP_BASE                "#EXT-X-MAP:URI=\""
 #define M3U8_END_LIST                "#EXT-X-ENDLIST\n"
 
@@ -1870,10 +1870,13 @@ ngx_http_pckg_m3u8_write_period_segments(u_char *p, ngx_pckg_period_t *period,
             /* write program date time before each segment */
             if (program_date_time)
             {
-                ngx_gmtime(time / timescale, &gmt);
+                /* use the same ms value that extinf is derived from, so that
+                 * pdt[n + 1] == pdt[n] + extinf[n] exactly */
+                ngx_gmtime(start / 1000, &gmt);
                 p = ngx_sprintf(p, M3U8_PROGRAM_DATE_TIME,
                                 gmt.ngx_tm_year, gmt.ngx_tm_mon, gmt.ngx_tm_mday,
-                                gmt.ngx_tm_hour, gmt.ngx_tm_min, gmt.ngx_tm_sec);
+                                gmt.ngx_tm_hour, gmt.ngx_tm_min, gmt.ngx_tm_sec,
+                                (uint32_t) (start % 1000));
             }
 
             /* write parts */
