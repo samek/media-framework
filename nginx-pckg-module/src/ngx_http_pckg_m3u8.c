@@ -1664,10 +1664,14 @@ ngx_http_pckg_m3u8_get_bitrate_size(ngx_http_request_t *r,
 
 
 static ngx_inline u_char *
-ngx_http_pckg_m3u8_append_extinf_tag(u_char *p, uint32_t duration)
+ngx_http_pckg_m3u8_append_extinf_tag(u_char *p, uint32_t duration,
+    uint32_t timescale)
 {
+    /* duration is in timescale units, rounded to the nearest whole second
+     * (e.g. 5.960 / 6.040 -> 6.000) */
     p = ngx_copy_fix(p, M3U8_EXTINF);
-    p = ngx_sprintf(p, "%uD.%03uD", duration / 1000, duration % 1000);
+    p = ngx_sprintf(p, "%uD.000",
+        (uint32_t) (((uint64_t) duration + timescale / 2) / timescale));
     *p++ = ',';
     *p++ = '\n';
     return p;
@@ -1870,13 +1874,13 @@ ngx_http_pckg_m3u8_write_period_segments(u_char *p, ngx_pckg_period_t *period,
             /* write program date time before each segment */
             if (program_date_time)
             {
-                /* use the same ms value that extinf is derived from, so that
-                 * pdt[n + 1] == pdt[n] + extinf[n] exactly */
-                ngx_gmtime(start / 1000, &gmt);
+                /* pdt = time / timescale */
+                ngx_gmtime(time / timescale, &gmt);
                 p = ngx_sprintf(p, M3U8_PROGRAM_DATE_TIME,
                                 gmt.ngx_tm_year, gmt.ngx_tm_mon, gmt.ngx_tm_mday,
                                 gmt.ngx_tm_hour, gmt.ngx_tm_min, gmt.ngx_tm_sec,
-                                (uint32_t) (start % 1000));
+                                (uint32_t) ((time % timescale) * 1000
+                                            / timescale));
             }
 
             /* write parts */
@@ -1899,7 +1903,9 @@ ngx_http_pckg_m3u8_write_period_segments(u_char *p, ngx_pckg_period_t *period,
             duration = end - start;
             start = end;
 
-            p = ngx_http_pckg_m3u8_append_extinf_tag(p, duration);
+            /* extinf = segment duration / timescale */
+            p = ngx_http_pckg_m3u8_append_extinf_tag(p, elt->duration,
+                                                     timescale);
 
             /* write gap / bitrate */
 
